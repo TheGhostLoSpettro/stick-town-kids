@@ -55,6 +55,12 @@
 
   .screen{display:none}
   .screen.on{display:block}
+  /* P6: the play screen fills the viewport so the canvas takes the space between the HUD
+     and the message bar — portrait => tall play window, landscape => short + wide. The
+     calc subtracts #app's own vertical padding (10 + 28 + safe) so nothing overflows. */
+  #s-play.on{display:flex;flex-direction:column;
+    min-height:calc(100svh - 38px - env(safe-area-inset-bottom,0px));
+    min-height:calc(100dvh - 38px - env(safe-area-inset-bottom,0px))}
 
   /* title */
   #s-title{text-align:center}
@@ -83,8 +89,8 @@
 
   /* world canvas */
   #worldWrap{position:relative;border-radius:16px;overflow:hidden;border:3px solid #fff;
-    box-shadow:0 10px 24px rgba(40,80,120,.2);line-height:0}
-  #world{width:100%;height:auto;display:block;image-rendering:auto}
+    box-shadow:0 10px 24px rgba(40,80,120,.2);line-height:0;flex:1 1 auto;min-height:190px}
+  #world{position:absolute;top:0;left:0;width:100%;height:100%;display:block;image-rendering:auto}
   #hintBar{position:absolute;left:0;right:0;bottom:0;padding:7px 12px;font-size:13px;font-weight:bold;
     color:#fff;background:linear-gradient(0deg,rgba(20,40,70,.66),rgba(20,40,70,0));text-align:center;
     text-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none}
@@ -231,7 +237,7 @@
     </div>
 
     <div id="worldWrap">
-      <canvas id="world" width="900" height="560"></canvas>
+      <canvas id="world"></canvas>
       <button id="muteBtn" onclick="toggleMute()" title="Sound on/off (M)">🔊</button>
       <div id="hintBar">Use the arrow keys to walk around Stick Town!</div>
       <div id="dpad">
@@ -502,7 +508,8 @@ const SKY_M = 100;   // how much sky shows around the floating town slab (dioram
 /* =====================================================================
    OPEN-WORLD ENGINE (canvas)
    ===================================================================== */
-let cv, ctx, CW, CH;
+let cv, ctx, CW, CH, worldWrap, DRAW_Z=1;
+const ZOOM_CSS=1.0;   // CSS px per world unit — constant, so a bigger viewport shows MORE town (not a bigger character)
 const keys={up:false,down:false,left:false,right:false};
 const player={x:1080, y:660, facing:1, phase:0, moving:false};
 let camX=0, camY=0, running=false, near=null, lastT=0;
@@ -538,9 +545,29 @@ let clouds=[], critters=[], dust=[], smoke=[], cars=[];
 const petF={x:0,y:0,b:0};                              // your pet pal's world position
 let stepT=0, smokeT=0;
 
+/* P6 — one unified responsive rule: size the canvas backing to the actual play window,
+   then derive the visible WORLD area from it via a constant on-screen zoom. A bigger
+   viewport therefore shows MORE town (portrait => taller, landscape => wider) while the
+   character keeps a steady, readable size. Re-runs on resize / orientation change. */
+function resize(){
+  if(!cv) return;
+  const dpr=Math.min(2, window.devicePixelRatio||1);
+  let cssW=Math.round(cv.getBoundingClientRect().width);
+  let cssH=Math.round(cv.getBoundingClientRect().height);
+  if(cssW<2||cssH<2){ cssW=900; cssH=560; }       // play screen hidden at boot — sane fallback
+  cv.width=Math.max(1,Math.round(cssW*dpr));
+  cv.height=Math.max(1,Math.round(cssH*dpr));
+  DRAW_Z=ZOOM_CSS*dpr;                              // backing px per world unit
+  CW=cv.width/DRAW_Z; CH=cv.height/DRAW_Z;          // visible world window, in world units
+  if(S){ camX=clamp(player.x-CW/2,-SKY_M,Math.max(-SKY_M,WORLD_W-CW+SKY_M));
+         camY=clamp(player.y-CH/2,-SKY_M,Math.max(-SKY_M,WORLD_H-CH+SKY_M)); }
+  if(running) draw();
+}
 function initWorld(){
-  cv=$("world"); ctx=cv.getContext("2d");
-  CW=cv.width; CH=cv.height;
+  cv=$("world"); ctx=cv.getContext("2d"); worldWrap=$("worldWrap");
+  resize();
+  // re-sync the canvas whenever its box changes (HUD reflow, orientation, viewport, iOS toolbar)
+  if(window.ResizeObserver){ try{ new ResizeObserver(()=>resize()).observe(worldWrap); }catch(e){} }
   // spawn NPCs in the open band between the two rows of shops
   npcs=[];
   for(let i=0;i<9;i++){
@@ -591,6 +618,10 @@ function bindInput(){
   });
   // if the window loses focus mid-keypress, don't keep walking forever
   window.addEventListener("blur",clearKeys);
+  // P6: keep the canvas matched to the live viewport on resize / orientation / iOS toolbar
+  window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", ()=>setTimeout(resize,120));
+  if(window.visualViewport) window.visualViewport.addEventListener("resize", resize);
   const hold=(el,on)=>{ if(!el)return; const d=e=>{e.preventDefault();audioInit();on(true);}; const u=e=>{e.preventDefault();on(false);};
     el.addEventListener("pointerdown",d); el.addEventListener("pointerup",u);
     el.addEventListener("pointerleave",u); el.addEventListener("pointercancel",u); };
@@ -866,6 +897,7 @@ function drawLamp(l, night){
 }
 function draw(){
   const amb=ambient();
+  ctx.setTransform(DRAW_Z,0,0,DRAW_Z,0,0);   // P6: world units -> backing px at the current zoom
   const slabX=-camX, slabY=-camY, ER=18, SR=14;
   // ---- sky behind the floating diorama ----
   ctx.fillStyle = amb.night? "#16244a":"#bfe9ff"; ctx.fillRect(0,0,CW,CH);
@@ -1360,6 +1392,7 @@ function renderLog(){
    ===================================================================== */
 function enterWorld(){
   show("s-play"); $("overlay").classList.remove("on"); curBld=null;
+  resize();   // P6: the play window is now visible — size the canvas to it before first draw
   player.x=clamp(S.px||1080,28,WORLD_W-28); player.y=clamp(S.py||660,120,WORLD_H-30);
   // never spawn inside a wall (the map layout changed across versions)
   if(blocked(player.x,player.y)){ player.x=1080; player.y=660; }
@@ -1369,7 +1402,7 @@ function enterWorld(){
   camX=clamp(player.x-CW/2,-SKY_M,Math.max(-SKY_M,WORLD_W-CW+SKY_M));
   camY=clamp(player.y-CH/2,-SKY_M,Math.max(-SKY_M,WORLD_H-CH+SKY_M));
   const mb=$("muteBtn"); if(mb) mb.textContent=AU.muted?"🔇":"🔊";
-  renderHUD(); renderLog(); startLoop();
+  renderHUD(); renderLog(); resize(); startLoop();   // resize AFTER the HUD populates (it changes the wrap height)
 }
 /* --- "Who's playing?" slot picker --- */
 const cleanName = s => String(s||"").replace(/[<>&]/g,"").trim().slice(0,16);
@@ -1465,13 +1498,13 @@ function runShot(){
   if(q.has("pet")) S.pet=0;
   if(q.has("car")) S.vehicle=4;
   if(q.has("hero")) S.clothes=3;
-  show("s-play"); $("overlay").classList.remove("on"); curBld=null;
+  show("s-play"); $("overlay").classList.remove("on"); curBld=null; resize();
   player.x=q.has("px")?+q.get("px"):1080; player.y=q.has("py")?+q.get("py"):660;
   player.facing=1; player.phase=q.has("walk")?1.2:0;
   ensureStars();
   camX=clamp(player.x-CW/2,-SKY_M,Math.max(-SKY_M,WORLD_W-CW+SKY_M));
   camY=clamp(player.y-CH/2,-SKY_M,Math.max(-SKY_M,WORLD_H-CH+SKY_M));
-  renderHUD(); renderLog(); draw();
+  renderHUD(); renderLog(); resize(); draw();   // resize AFTER the HUD populates (it changes the wrap height)
   const out=document.createElement("div"); out.id="shotOut"; out.style.display="none";
   out.textContent=cv.toDataURL("image/png"); document.body.appendChild(out);
   const m={};
@@ -1481,6 +1514,14 @@ function runShot(){
   m.canvasW=Math.round(cv.getBoundingClientRect().width);
   m.coarse=window.matchMedia("(hover:none),(pointer:coarse)").matches;
   m.dpadInDom=!!$("dpad"); m.goInDom=!!$("tcA");
+  // P6: prove the canvas reads the viewport (no fixed 900x560) and the visible world scales with it
+  const wwr=worldWrap.getBoundingClientRect(), dprv=Math.min(2,window.devicePixelRatio||1);
+  m.viewport={ cvW:cv.width, cvH:cv.height, dpr:dprv, zoomCss:ZOOM_CSS, drawZ:Math.round(DRAW_Z*1000)/1000,
+    worldWinW:Math.round(CW), worldWinH:Math.round(CH), wrapW:Math.round(wwr.width), wrapH:Math.round(wwr.height),
+    charPx:Math.round(34*ZOOM_CSS), fixed900:(cv.width===900&&cv.height===560) };
+  const hudR=$("hud").getBoundingClientRect(), logR=$("log").getBoundingClientRect();
+  m.layout={ controlsFit: wwr.height>=170,                 // d-pad (158 tall, bottom:12) fits the wrap => not clipped
+    wrapBelowHud: wwr.top>=hudR.bottom-1, logBelowWrap: logR.top>=wwr.bottom-1 };
   const meta=n=>{ const e=document.querySelector('meta[name="'+n+'"]'); return e?e.content:null; };
   m.pwa={ manifest:!!document.querySelector('link[rel="manifest"]'),
     appleIcon:!!document.querySelector('link[rel="apple-touch-icon"]'),
