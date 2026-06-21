@@ -1,2 +1,4 @@
 verify/
 *.tmp
+.DS_Store
+Thumbs.db
