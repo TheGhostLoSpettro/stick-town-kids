@@ -25,9 +25,20 @@
   #app{max-width:940px;margin:0 auto;padding:10px 12px calc(28px + env(safe-area-inset-bottom,0px))}
 
   /* ---------- HUD ---------- */
-  #hud{background:var(--paper);border:3px solid #fff;border-radius:16px;
+  #hud{background:var(--paper);border:3px solid #fff;border-radius:16px;position:relative;
     box-shadow:0 8px 22px rgba(40,80,120,.18);padding:10px 12px;margin-bottom:10px}
-  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between}
+  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;padding-right:34px}
+  /* P7 collapsible HUD: a dedicated, misfire-safe toggle + a slim collapsed bar (name + coins) */
+  #hudToggle{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:9px;z-index:3;
+    border:2px solid #e3f1fb;background:linear-gradient(180deg,#fff,#eef9ff);color:#2a6fb0;font-size:15px;
+    line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(40,80,120,.12)}
+  #hudToggle:hover{border-color:#7cc6ff}
+  #hudSlim{display:none;align-items:center;gap:12px;padding-right:34px;cursor:pointer}
+  #hudSlim .sn{font-size:16px;font-weight:bold;color:#2a6fb0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hudSlim .sc{font-size:16px;font-weight:bold;color:#e6a700;margin-left:auto;white-space:nowrap}
+  #hud.collapsed #hudTop, #hud.collapsed #bars{display:none}
+  #hud.collapsed #hudSlim{display:flex}
   #avatarBox{display:flex;align-items:center;gap:10px}
   #avatar{font-size:30px;width:46px;height:46px;display:flex;align-items:center;justify-content:center;
     background:linear-gradient(180deg,#fff,#e9f7ff);border:3px solid #fff;border-radius:50%;
@@ -220,6 +231,11 @@
   <!-- ============ PLAY ============ -->
   <section id="s-play" class="screen">
     <div id="hud">
+      <button id="hudToggle" onclick="toggleHud()" aria-label="Hide stats" title="Hide stats">▾</button>
+      <div id="hudSlim" onclick="if(S&&S.hudCollapsed)toggleHud()">
+        <span class="sn" id="slim-name">You</span>
+        <span class="sc" id="slim-coins">🪙0</span>
+      </div>
       <div id="hudTop">
         <div id="avatarBox">
           <div id="avatar">🧍</div>
@@ -356,6 +372,7 @@ function freshState(){
     spins:0, won:false, px:1080, py:660,
     pet:-1, starDay:0, stars:[],
     ballColor:"#3a8dff",
+    hudCollapsed:false,
     log:[], _m:{}, _v:3
   };
 }
@@ -1380,6 +1397,29 @@ function renderHUD(){
   $("bars").innerHTML =
     barRow("💪 Str",S.str,"f-str")+barRow("🧠 Smart",S.smarts,"f-smarts")+barRow("🤝 Charm",S.charm,"f-charm")+
     barRow("⚡ Energy",S.energy,"f-energy")+barRow("🍽️ Full",S.full,"f-full")+barRow("😄 Fun",S.fun,"f-fun");
+  // P7 slim bar (collapsed view) — name + coins only
+  const sn=$("slim-name"); if(sn) sn.textContent = (S.name&&S.name!=="You") ? S.name : "You";
+  const sc=$("slim-coins"); if(sc) sc.textContent = money(S.funds);
+}
+/* P7 — collapsible HUD: a dedicated toggle flips a saved preference; the slim bar shows
+   name + coins. Collapsing fires the P6 resize() so the responsive canvas reclaims the
+   freed vertical space (the ResizeObserver on worldWrap also catches the reflow). */
+function applyHudCollapsed(){
+  const h=$("hud"); if(!h) return;
+  const col=!!(S&&S.hudCollapsed);
+  h.classList.toggle("collapsed", col);
+  const t=$("hudToggle");
+  if(t){ t.textContent = col ? "▸" : "▾";
+    t.setAttribute("aria-label", col ? "Show stats" : "Hide stats");
+    t.setAttribute("title", col ? "Show stats" : "Hide stats"); }
+  resize();
+}
+function toggleHud(){
+  if(!S) return;
+  S.hudCollapsed = !S.hudCollapsed;
+  sfx("click");
+  applyHudCollapsed();
+  save();
 }
 function renderLog(){
   $("log").innerHTML = S.log.length
@@ -1402,7 +1442,7 @@ function enterWorld(){
   camX=clamp(player.x-CW/2,-SKY_M,Math.max(-SKY_M,WORLD_W-CW+SKY_M));
   camY=clamp(player.y-CH/2,-SKY_M,Math.max(-SKY_M,WORLD_H-CH+SKY_M));
   const mb=$("muteBtn"); if(mb) mb.textContent=AU.muted?"🔇":"🔊";
-  renderHUD(); renderLog(); resize(); startLoop();   // resize AFTER the HUD populates (it changes the wrap height)
+  renderHUD(); renderLog(); applyHudCollapsed(); startLoop();   // P7: apply saved HUD state (it calls resize after the HUD settles)
 }
 /* --- "Who's playing?" slot picker --- */
 const cleanName = s => String(s||"").replace(/[<>&]/g,"").trim().slice(0,16);
@@ -1478,6 +1518,7 @@ function tryContinue(slot){
   if(typeof S.starDay!=="number")S.starDay=0;
   if(!Array.isArray(S.stars))S.stars=[];
   if(typeof S.ballColor!=="string"||!S.ballColor)S.ballColor="#2a8de0";  // legacy heroes keep their original blue
+  if(typeof S.hudCollapsed!=="boolean")S.hudCollapsed=false;             // legacy saves default to expanded HUD
   enterWorld(); toast("Welcome back"+(S.name!=="You"?", "+S.name:"")+"! 👋");
 }
 function resumeWorld(){ enterWorld(); }
@@ -1498,13 +1539,14 @@ function runShot(){
   if(q.has("pet")) S.pet=0;
   if(q.has("car")) S.vehicle=4;
   if(q.has("hero")) S.clothes=3;
+  if(q.get("hud")==="collapsed") S.hudCollapsed=true;
   show("s-play"); $("overlay").classList.remove("on"); curBld=null; resize();
   player.x=q.has("px")?+q.get("px"):1080; player.y=q.has("py")?+q.get("py"):660;
   player.facing=1; player.phase=q.has("walk")?1.2:0;
   ensureStars();
   camX=clamp(player.x-CW/2,-SKY_M,Math.max(-SKY_M,WORLD_W-CW+SKY_M));
   camY=clamp(player.y-CH/2,-SKY_M,Math.max(-SKY_M,WORLD_H-CH+SKY_M));
-  renderHUD(); renderLog(); resize(); draw();   // resize AFTER the HUD populates (it changes the wrap height)
+  renderHUD(); renderLog(); applyHudCollapsed(); draw();   // P7: apply HUD state (calls resize after the HUD settles)
   const out=document.createElement("div"); out.id="shotOut"; out.style.display="none";
   out.textContent=cv.toDataURL("image/png"); document.body.appendChild(out);
   const m={};
@@ -1522,6 +1564,15 @@ function runShot(){
   const hudR=$("hud").getBoundingClientRect(), logR=$("log").getBoundingClientRect();
   m.layout={ controlsFit: wwr.height>=170,                 // d-pad (158 tall, bottom:12) fits the wrap => not clipped
     wrapBelowHud: wwr.top>=hudR.bottom-1, logBelowWrap: logR.top>=wwr.bottom-1 };
+  // P7: collapsible HUD — slim bar (name+coins) when collapsed; collapsing frees vertical space for the canvas
+  const disp=el=>{ const e=$(el); return e?getComputedStyle(e).display:null; };
+  const splay=document.getElementById("s-play"), foot=$("footer");
+  m.hud={ collapsed:!!(S&&S.hudCollapsed), hudH:Math.round(hudR.height),
+    slimShown:disp("hudSlim")!=="none", barsShown:disp("bars")!=="none",
+    togglePresent:!!$("hudToggle"), toggleGlyph:($("hudToggle")||{}).textContent,
+    slimName:($("slim-name")||{}).textContent, slimCoins:($("slim-coins")||{}).textContent,
+    innerH:window.innerHeight, splayH:splay?Math.round(splay.getBoundingClientRect().height):0,
+    logH:Math.round(logR.height), footH:foot?Math.round(foot.getBoundingClientRect().height):0 };
   const meta=n=>{ const e=document.querySelector('meta[name="'+n+'"]'); return e?e.content:null; };
   m.pwa={ manifest:!!document.querySelector('link[rel="manifest"]'),
     appleIcon:!!document.querySelector('link[rel="apple-touch-icon"]'),
