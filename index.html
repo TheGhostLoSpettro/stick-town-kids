@@ -16,6 +16,7 @@
   :root{
     --sky1:#9fe3ff; --sky2:#d6f4ff; --ink:#274060; --paper:#fffdf5;
     --good:#37c871; --bad:#ff6b6b; --gold:#ffcf3f;
+    --ctl-lift:42px;   /* P8: lift the touch controls clear of the hint bar + home-indicator safe area */
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:linear-gradient(180deg,var(--sky1),var(--sky2) 55%,#eafff0);
@@ -25,16 +26,24 @@
   #app{max-width:940px;margin:0 auto;padding:10px 12px calc(28px + env(safe-area-inset-bottom,0px))}
 
   /* ---------- HUD ---------- */
-  #hud{background:var(--paper);border:3px solid #fff;border-radius:16px;position:relative;
-    box-shadow:0 8px 22px rgba(40,80,120,.18);padding:10px 12px;margin-bottom:10px}
-  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;padding-right:34px}
+  /* P8: the HUD floats as a translucent overlay pinned top-left; the world shows through behind it.
+     Collapsed = slim name+coins chip (the resting default). Expanded = full stats card + Start Over. */
+  #hud{position:absolute;z-index:6;line-height:1.2;          /* P8-fixup: own line-height — #worldWrap sets line-height:0 (for the canvas) which would otherwise collapse HUD text onto itself */
+    top:calc(8px + env(safe-area-inset-top,0px));
+    left:calc(60px + env(safe-area-inset-left,0px));   /* P8-fixup2: start right of the top-left mute button so they never collide */
+    max-width:min(400px,calc(100vw - 68px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));  /* P8-fixup: compact card so the top-right chevron hugs it; fixup2: -68 = 60 left offset + 8 right margin (no overflow) */
+    background:rgba(255,253,245,.92);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+    border:2px solid rgba(255,255,255,.72);border-radius:16px;
+    box-shadow:0 8px 22px rgba(40,80,120,.22);padding:9px 11px}
+  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;padding-right:44px}
   /* P7 collapsible HUD: a dedicated, misfire-safe toggle + a slim collapsed bar (name + coins) */
-  #hudToggle{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:9px;z-index:3;
-    border:2px solid #e3f1fb;background:linear-gradient(180deg,#fff,#eef9ff);color:#2a6fb0;font-size:15px;
+  /* P8-fixup: clear, obvious collapse/expand chevron, flush in the HUD card's top-right corner */
+  #hudToggle{position:absolute;top:7px;right:7px;width:36px;height:36px;border-radius:10px;z-index:8;
+    border:2px solid #9ad0f5;background:linear-gradient(180deg,#fff,#e8f5ff);color:#2a6fb0;font-size:18px;
     line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;
-    box-shadow:0 2px 6px rgba(40,80,120,.12)}
+    box-shadow:0 2px 7px rgba(40,80,120,.2)}
   #hudToggle:hover{border-color:#7cc6ff}
-  #hudSlim{display:none;align-items:center;gap:12px;padding-right:34px;cursor:pointer}
+  #hudSlim{display:none;align-items:center;gap:12px;padding-right:44px;cursor:pointer}
   #hudSlim .sn{font-size:16px;font-weight:bold;color:#2a6fb0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #hudSlim .sc{font-size:16px;font-weight:bold;color:#e6a700;margin-left:auto;white-space:nowrap}
   #hud.collapsed #hudTop, #hud.collapsed #bars{display:none}
@@ -66,12 +75,11 @@
 
   .screen{display:none}
   .screen.on{display:block}
-  /* P6: the play screen fills the viewport so the canvas takes the space between the HUD
-     and the message bar — portrait => tall play window, landscape => short + wide. The
-     calc subtracts #app's own vertical padding (10 + 28 + safe) so nothing overflows. */
-  #s-play.on{display:flex;flex-direction:column;
-    min-height:calc(100svh - 38px - env(safe-area-inset-bottom,0px));
-    min-height:calc(100dvh - 38px - env(safe-area-inset-bottom,0px))}
+  /* P8: the play screen is a full-bleed, edge-to-edge fixed layer covering the whole viewport.
+     The canvas is the base layer; the HUD / hint bar / controls / toasts float on top as overlays.
+     This is what fixes landscape — the chrome no longer eats vertical space out of a stacked column,
+     so the P6 viewport-derived camera shows the whole town in BOTH orientations. */
+  #s-play.on{position:fixed;inset:0;z-index:1;display:block}
 
   /* title */
   #s-title{text-align:center}
@@ -99,26 +107,39 @@
   .slotDel:hover{border-color:#ff9d9d;background:#fff3f3}
 
   /* world canvas */
-  #worldWrap{position:relative;border-radius:16px;overflow:hidden;border:3px solid #fff;
-    box-shadow:0 10px 24px rgba(40,80,120,.2);line-height:0;flex:1 1 auto;min-height:190px}
+  /* P8: full-bleed base layer — fills the play screen edge to edge, no card inset / rounding. */
+  #worldWrap{position:absolute;inset:0;overflow:hidden;line-height:0;background:#bfe9ff}
   #world{position:absolute;top:0;left:0;width:100%;height:100%;display:block;image-rendering:auto}
-  #hintBar{position:absolute;left:0;right:0;bottom:0;padding:7px 12px;font-size:13px;font-weight:bold;
-    color:#fff;background:linear-gradient(0deg,rgba(20,40,70,.66),rgba(20,40,70,0));text-align:center;
+  /* P8: explain/hint text KEPT — a slim translucent bar pinned to the bottom edge, padded up
+     past the home-indicator safe area so the text never hides under it. */
+  #hintBar{position:absolute;left:0;right:0;bottom:0;z-index:4;
+    padding:7px 12px calc(7px + env(safe-area-inset-bottom,0px));font-size:13px;font-weight:bold;
+    color:#fff;background:linear-gradient(0deg,rgba(20,40,70,.74),rgba(20,40,70,0));text-align:center;
     text-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none}
   /* touch controls (4-way d-pad + GO) */
   .tc{position:absolute;border-radius:50%;border:none;width:50px;height:50px;
     background:rgba(255,255,255,.80);box-shadow:0 4px 12px rgba(0,0,0,.25);font-size:22px;color:#274060;
     display:flex;align-items:center;justify-content:center;touch-action:none;font-family:inherit}
   .tc:active{background:#fff;transform:scale(.93)}
-  #dpad{position:absolute;left:12px;bottom:12px;width:158px;height:158px;pointer-events:none}
+  /* P8: touch controls anchor to the bottom corners (d-pad bottom-LEFT, GO bottom-RIGHT — natural
+     thumb rest), lifted clear of the safe-area insets AND of the hint bar via --ctl-lift. */
+  #dpad{position:absolute;z-index:5;pointer-events:none;width:158px;height:158px;
+    left:calc(10px + env(safe-area-inset-left,0px));
+    bottom:calc(var(--ctl-lift) + env(safe-area-inset-bottom,0px))}
   #dpad .tc{position:absolute;pointer-events:auto}
   #tcU{left:54px;top:0} #tcD{left:54px;bottom:0} #tcL{left:0;top:54px} #tcR{right:0;top:54px}
-  #tcA{right:14px;bottom:30px;width:70px;height:70px;background:rgba(110,220,140,.92);color:#fff;
-    font-size:18px;font-weight:bold}
+  #tcA{position:absolute;z-index:5;width:70px;height:70px;background:rgba(110,220,140,.92);color:#fff;
+    font-size:18px;font-weight:bold;
+    right:calc(16px + env(safe-area-inset-right,0px));
+    bottom:calc(var(--ctl-lift) + 12px + env(safe-area-inset-bottom,0px))}
   @media(hover:hover) and (pointer:fine){ .tc,#dpad{display:none} }
-  #muteBtn{position:absolute;top:10px;left:10px;width:42px;height:42px;border-radius:50%;
-    border:2px solid rgba(255,255,255,.7);background:rgba(255,253,245,.88);font-size:19px;cursor:pointer;
-    z-index:5;box-shadow:0 4px 10px rgba(0,0,0,.2);font-family:inherit}
+  /* P8-fixup2: mute moves to the top-LEFT corner; the HUD card (shifted right) and its top-right collapse
+     chevron own the rest of the top, so the speaker and the chevron no longer stack/collide. */
+  #muteBtn{position:absolute;width:42px;height:42px;border-radius:50%;
+    top:calc(10px + env(safe-area-inset-top,0px));
+    left:calc(10px + env(safe-area-inset-left,0px));
+    border:2px solid rgba(255,255,255,.7);background:rgba(255,253,245,.9);font-size:19px;cursor:pointer;
+    z-index:7;box-shadow:0 4px 10px rgba(0,0,0,.2);font-family:inherit}
   #muteBtn:hover{transform:scale(1.06)}
 
   /* building overlay */
@@ -145,16 +166,21 @@
     background:#eef9ff;border:2px solid #bfe3ff;border-radius:12px;padding:8px 14px;margin-bottom:12px}
   #leaveBtn:hover{background:#e0f2ff}
 
-  #log{margin-top:10px;background:var(--paper);border:3px solid #fff;border-radius:14px;padding:8px 13px;
-    box-shadow:0 6px 13px rgba(40,80,120,.1);max-height:96px;overflow:auto;font-size:12.5px}
-  #log .ln{padding:2px 0;border-bottom:1px dashed #eaf2f7}
-  #log .ln:last-child{border-bottom:none}
-  #log .ln.g{color:#1f9d55} #log .ln.b{color:#d0453a} #log .ln.star{color:#c79100;font-weight:bold}
+  /* P8: the stacked activity-log card is removed — its reward messages are now fading toasts (#toasts). */
 
-  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(40px);
-    background:#274060;color:#fff;padding:11px 20px;border-radius:30px;font-size:15px;font-weight:bold;
-    box-shadow:0 10px 24px rgba(0,0,0,.3);opacity:0;transition:.3s;z-index:60;pointer-events:none;max-width:90vw;text-align:center}
-  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* P8: toast STACK — reward + status messages each slide down from the top-center (clear of the
+     top-left HUD chip and top-right mute), hold a few seconds, fade, and remove themselves. Several
+     stack gracefully (newest on top). Replaces both the single overwriting toast and the log card. */
+  #toasts{position:fixed;z-index:60;left:50%;transform:translateX(-50%);
+    top:calc(58px + env(safe-area-inset-top,0px));
+    display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:92vw;pointer-events:none}
+  .toastItem{background:rgba(39,64,96,.95);color:#fff;padding:10px 18px;border-radius:24px;
+    font-size:15px;font-weight:bold;box-shadow:0 10px 24px rgba(0,0,0,.32);text-align:center;max-width:92vw;
+    opacity:0;transform:translateY(-14px);transition:opacity .28s ease, transform .28s ease}
+  .toastItem.show{opacity:1;transform:translateY(0)}
+  .toastItem.g{background:rgba(31,122,64,.96)}
+  .toastItem.star{background:rgba(193,138,0,.97)}
+  .toastItem.b{background:rgba(190,60,50,.96)}
 
   #s-win{text-align:center}
   #s-win .card{background:linear-gradient(180deg,#fffaf0,#fff);border:3px solid var(--gold);border-radius:24px;
@@ -170,10 +196,15 @@
   .backbtn{cursor:pointer;font-family:inherit;font-size:14px;font-weight:bold;color:#2a6fb0;
     background:#eef9ff;border:2px solid #bfe3ff;border-radius:12px;padding:8px 14px}
 
-  #footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;opacity:.7}
-  #footer button{cursor:pointer;font-family:inherit;font-size:12px;background:#fff;border:2px solid #e3f1fb;
-    border-radius:10px;padding:5px 11px;color:var(--ink)}
-  #footer button:hover{border-color:#ffb0b0;color:#d0453a}
+  /* P8: the footer row is gone. Start Over + the tiny auto-save tagline now live inside the HUD's
+     expanded card (#hudFoot), shown only when the HUD is expanded — no stacked footer row. */
+  #hudFoot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:9px;
+    padding-top:8px;border-top:1px dashed #d9e8f2}
+  #hudFoot .tagmark{font-size:10.5px;opacity:.6;line-height:1.25}
+  #hudFoot button{cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;background:#fff;
+    border:2px solid #f0d6d6;border-radius:10px;padding:6px 12px;color:#c0453a;flex-shrink:0}
+  #hudFoot button:hover{border-color:#ff9d9d;background:#fff3f3}
+  #hud.collapsed #hudFoot{display:none}
 
   .goal{font-size:13px;text-align:left;background:#f3fbff;border:2px solid #dcefff;border-radius:14px;
     padding:11px 13px;margin-top:6px}
@@ -230,32 +261,39 @@
 
   <!-- ============ PLAY ============ -->
   <section id="s-play" class="screen">
-    <div id="hud">
-      <button id="hudToggle" onclick="toggleHud()" aria-label="Hide stats" title="Hide stats">▾</button>
-      <div id="hudSlim" onclick="if(S&&S.hudCollapsed)toggleHud()">
-        <span class="sn" id="slim-name">You</span>
-        <span class="sc" id="slim-coins">🪙0</span>
-      </div>
-      <div id="hudTop">
-        <div id="avatarBox">
-          <div id="avatar">🧍</div>
-          <div id="who"><h1>You, the Stick Hero</h1><div class="sub" id="status">Feeling great!</div></div>
-        </div>
-        <div id="wallet">
-          <div class="chip coins"><div class="k">Coins</div><div class="v" id="w-coins">0</div></div>
-          <div class="chip bank"><div class="k">Bank</div><div class="v" id="w-bank">0</div></div>
-          <div class="chip day"><div class="k">Day</div><div class="v" id="w-day">1</div></div>
-          <div class="chip"><div class="k">Time</div><div class="v" id="w-clock">8:00</div></div>
-          <div class="chip"><div class="k">Stars</div><div class="v" id="w-stars" style="color:#e6a700">0/5</div></div>
-        </div>
-      </div>
-      <div id="bars"></div>
-    </div>
-
+    <!-- P8: worldWrap is the full-bleed base layer; everything else floats over the canvas. -->
     <div id="worldWrap">
       <canvas id="world"></canvas>
+
+      <!-- HUD: translucent overlay pinned top-left (collapsed chip by default, expandable card) -->
+      <div id="hud">
+        <button id="hudToggle" onclick="toggleHud()" aria-label="Hide stats" title="Hide stats">▾</button>
+        <div id="hudSlim" onclick="if(S&&S.hudCollapsed)toggleHud()">
+          <span class="sn" id="slim-name">You</span>
+          <span class="sc" id="slim-coins">🪙0</span>
+        </div>
+        <div id="hudTop">
+          <div id="avatarBox">
+            <div id="avatar">🧍</div>
+            <div id="who"><h1>You, the Stick Hero</h1><div class="sub" id="status">Feeling great!</div></div>
+          </div>
+          <div id="wallet">
+            <div class="chip coins"><div class="k">Coins</div><div class="v" id="w-coins">0</div></div>
+            <div class="chip bank"><div class="k">Bank</div><div class="v" id="w-bank">0</div></div>
+            <div class="chip day"><div class="k">Day</div><div class="v" id="w-day">1</div></div>
+            <div class="chip"><div class="k">Time</div><div class="v" id="w-clock">8:00</div></div>
+            <div class="chip"><div class="k">Stars</div><div class="v" id="w-stars" style="color:#e6a700">0/5</div></div>
+          </div>
+        </div>
+        <div id="bars"></div>
+        <!-- P8: Start Over + tiny auto-save tagline tucked into the expanded HUD (no footer row) -->
+        <div id="hudFoot">
+          <span class="tagmark">Stick Town · Kids · auto-saves as you play</span>
+          <button onclick="resetGame()">Start Over</button>
+        </div>
+      </div>
+
       <button id="muteBtn" onclick="toggleMute()" title="Sound on/off (M)">🔊</button>
-      <div id="hintBar">Use the arrow keys to walk around Stick Town!</div>
       <div id="dpad">
         <button class="tc" id="tcU">▲</button>
         <button class="tc" id="tcD">▼</button>
@@ -263,12 +301,7 @@
         <button class="tc" id="tcR">▶</button>
       </div>
       <button class="tc" id="tcA">GO</button>
-    </div>
-
-    <div id="log"></div>
-    <div id="footer">
-      <span>Stick Town · Kids Edition · auto-saves as you play</span>
-      <button onclick="resetGame()">Start Over</button>
+      <div id="hintBar">Use the arrow keys to walk around Stick Town!</div>
     </div>
   </section>
 
@@ -312,7 +345,7 @@
   </div>
 
 </div>
-<div id="toast"></div>
+<div id="toasts" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -372,7 +405,7 @@ function freshState(){
     spins:0, won:false, px:1080, py:660,
     pet:-1, starDay:0, stars:[],
     ballColor:"#3a8dff",
-    hudCollapsed:false,
+    hudCollapsed:true,   /* P8: new games rest as the slim name+coins chip (full-bleed default) */
     log:[], _m:{}, _v:3
   };
 }
@@ -391,9 +424,29 @@ function show(id){ document.querySelectorAll(".screen").forEach(s=>s.classList.r
 function money(n){ return "🪙"+Math.round(n).toLocaleString(); }
 function fmtClock(c){ let h=Math.floor(c)%24; const m=Math.round((c-Math.floor(c))*60);
   let hh=h%12; if(hh===0)hh=12; const ap=h<12?"am":"pm"; return hh+":"+String(m).padStart(2,"0")+ap; }
-function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),1700); }
-function logLine(msg,cls){ S.log.unshift({m:msg,c:cls||""}); if(S.log.length>40)S.log.pop(); }
+/* P8 — toast stack: each message is its own pop-up that slides in, holds a few seconds, fades,
+   then removes itself. Several stack gracefully (newest on top); we cap the live count and skip an
+   identical message fired within ~700ms (so e.g. two quick star pickups read cleanly instead of
+   clobbering one another the way the old single-element toast did). */
+const TOAST_MAX=5;   /* P8: holds the all-5-stars climax burst (~4 at once) + a stray without evicting an unseen message */
+function pushToast(msg,cls){
+  const host=$("toasts"); if(!host||msg==null) return;
+  const text=String(msg), now=Date.now(), top=host.firstChild;
+  if(top&&top.dataset&&top.dataset.msg===text&&(now-(+top.dataset.born||0))<700) return;  // de-dupe rapid repeats
+  const el=document.createElement("div");
+  el.className="toastItem"+(cls?(" "+cls):"");
+  el.textContent=text; el.dataset.msg=text; el.dataset.born=String(now);
+  host.insertBefore(el,host.firstChild);
+  while(host.children.length>TOAST_MAX){ const old=host.lastChild; if(old)host.removeChild(old); else break; }
+  void el.offsetHeight; el.classList.add("show");                       // reflow, then animate in
+  const ttl = cls==="star" ? 3500 : (cls==="g" ? 3000 : 2600);         // ~2.5–3.5s per the brief
+  setTimeout(()=>{ el.classList.remove("show");
+    setTimeout(()=>{ if(el.parentNode)el.parentNode.removeChild(el); },320); }, ttl);
+}
+function toast(msg){ pushToast(msg,""); }   /* neutral channel: mixes notices ("Welcome back") and nudges ("Too sleepy!") — plain style is correct */
+/* logLine still records to S.log so the save schema is untouched, AND now surfaces the message as a
+   fading reward toast — the activity-log "card" is gone, the messages live on as the toasts. */
+function logLine(msg,cls){ if(S){ S.log.unshift({m:msg,c:cls||""}); if(S.log.length>40)S.log.pop(); } pushToast(msg,cls||""); }
 
 /* ---------- time & day ---------- */
 function rolloverDay(){
@@ -1421,11 +1474,10 @@ function toggleHud(){
   applyHudCollapsed();
   save();
 }
-function renderLog(){
-  $("log").innerHTML = S.log.length
-    ? S.log.map(l=>`<div class="ln ${l.c}">${l.m}</div>`).join("")
-    : `<div class="ln">👋 Welcome to Stick Town! Walk down the street and step into a shop's door.</div>`;
-}
+/* P8: the activity-log card is gone (reward messages are toasts now). renderLog is kept as a safe
+   no-op so its existing call sites need no edits. New games announce themselves via the "rolled into
+   Stick Town!" toast from confirmMakeHero; continues fire a "Welcome back" toast from tryContinue. */
+function renderLog(){ /* no card to render — feedback is delivered through the toast stack */ }
 
 /* =====================================================================
    BOOT
@@ -1518,7 +1570,7 @@ function tryContinue(slot){
   if(typeof S.starDay!=="number")S.starDay=0;
   if(!Array.isArray(S.stars))S.stars=[];
   if(typeof S.ballColor!=="string"||!S.ballColor)S.ballColor="#2a8de0";  // legacy heroes keep their original blue
-  if(typeof S.hudCollapsed!=="boolean")S.hudCollapsed=false;             // legacy saves default to expanded HUD
+  if(typeof S.hudCollapsed!=="boolean")S.hudCollapsed=true;              // P8: pre-P7 saves (no field) rest collapsed; real P7 saves keep their stored value
   enterWorld(); toast("Welcome back"+(S.name!=="You"?", "+S.name:"")+"! 👋");
 }
 function resumeWorld(){ enterWorld(); }
@@ -1539,7 +1591,7 @@ function runShot(){
   if(q.has("pet")) S.pet=0;
   if(q.has("car")) S.vehicle=4;
   if(q.has("hero")) S.clothes=3;
-  if(q.get("hud")==="collapsed") S.hudCollapsed=true;
+  S.hudCollapsed = (q.get("hud")==="collapsed");   // P8: explicit in shot mode so "exp" runs stay expanded even though new games now default to collapsed
   show("s-play"); $("overlay").classList.remove("on"); curBld=null; resize();
   player.x=q.has("px")?+q.get("px"):1080; player.y=q.has("py")?+q.get("py"):660;
   player.facing=1; player.phase=q.has("walk")?1.2:0;
@@ -1561,18 +1613,49 @@ function runShot(){
   m.viewport={ cvW:cv.width, cvH:cv.height, dpr:dprv, zoomCss:ZOOM_CSS, drawZ:Math.round(DRAW_Z*1000)/1000,
     worldWinW:Math.round(CW), worldWinH:Math.round(CH), wrapW:Math.round(wwr.width), wrapH:Math.round(wwr.height),
     charPx:Math.round(34*ZOOM_CSS), fixed900:(cv.width===900&&cv.height===560) };
-  const hudR=$("hud").getBoundingClientRect(), logR=$("log").getBoundingClientRect();
-  m.layout={ controlsFit: wwr.height>=170,                 // d-pad (158 tall, bottom:12) fits the wrap => not clipped
-    wrapBelowHud: wwr.top>=hudR.bottom-1, logBelowWrap: logR.top>=wwr.bottom-1 };
-  // P7: collapsible HUD — slim bar (name+coins) when collapsed; collapsing frees vertical space for the canvas
+  // P8 overlay geometry — prove full-bleed canvas + non-overlapping floating chrome within safe areas
+  const R=el=>{ const e=$(el); return e?e.getBoundingClientRect():null; };
+  const box=r=>r?{x:Math.round(r.left),y:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height),r:Math.round(r.right),b:Math.round(r.bottom)}:null;
+  const hit=(a,b)=>!!(a&&b)&&!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top);
+  // headless desktop Chrome is a fine-pointer device, so the touch controls are display:none via the
+  // hover/pointer media query — force them shown ONLY for this measurement so their corner geometry
+  // can actually be checked (on the real phone they show natively; this never runs outside ?shot).
+  ["dpad","tcA"].forEach(id=>{ const e=$(id); if(e) e.style.display="block"; });
+  // inject two reward toasts so the toast band can be measured against the controls/chip/hint bar
+  try{ pushToast("⭐ You found a shiny star! +🪙15!","g"); pushToast("💼 You worked as Desk Buddy and earned 🪙70!","g"); }catch(e){}
+  const VW=window.innerWidth, VH=window.innerHeight;
+  const hudR=R("hud"), muteR=R("muteBtn"), hintR=R("hintBar"), dpadR=R("dpad"), goR=R("tcA"), toR=R("toasts");
+  const inView=r=>!!r&&r.left>=-1&&r.top>=-1&&r.right<=VW+1&&r.bottom<=VH+1;
+  const cvR=cv.getBoundingClientRect();
+  m.bleed={ fullBleed: cvR.left<=1&&cvR.top<=1&&cvR.right>=VW-1&&cvR.bottom>=VH-1,
+    cv:box(cvR), vw:VW, vh:VH };
+  m.overlays={ hud:box(hudR), mute:box(muteR), hint:box(hintR), dpad:box(dpadR), go:box(goR), toasts:box(toR),
+    inView:{ hud:inView(hudR), mute:inView(muteR), hint:inView(hintR), dpad:inView(dpadR), go:inView(goR), toasts:inView(toR) } };
+  // P8 acceptance: chip + controls + hint bar + toasts are mutually non-overlapping (resting/collapsed layout)
+  const no={ mute_hud:!hit(muteR,hudR), hud_dpad:!hit(hudR,dpadR), hud_go:!hit(hudR,goR), hud_toasts:!hit(hudR,toR),
+    dpad_go:!hit(dpadR,goR), dpad_hint:!hit(dpadR,hintR), go_hint:!hit(goR,hintR),
+    toasts_dpad:!hit(toR,dpadR), toasts_go:!hit(toR,goR), toasts_hint:!hit(toR,hintR), toasts_mute:!hit(toR,muteR) };
+  no.allClear=Object.keys(no).every(k=>no[k]===true);
+  m.noOverlap=no;
+  // P8-fixup guards: HUD title text must stack (not overlap), and the toggle must hug the card's top-right
+  const Rq=sel=>{ const e=document.querySelector(sel); return e?e.getBoundingClientRect():null; };
+  const h1r=Rq("#who h1"), subr=Rq("#status"), tgr=R("hudToggle");
+  m.hudFix={ titleStacks: !!(h1r&&subr) && subr.top>=h1r.bottom-1,           // mood line sits BELOW the name line
+    toggleOnCard: !!(tgr&&hudR) && tgr.left>=hudR.left-1 && tgr.right<=hudR.right+1 && tgr.top>=hudR.top-1,
+    muteClearOfHud: !!(muteR&&hudR) && muteR.right<=hudR.left+1,            // P8-fixup2: mute sits fully LEFT of the HUD card
+    muteToggleClear: !hit(muteR,tgr),                                      // P8-fixup2: mute no longer overlaps the collapse chevron
+    toggleRightOfHud: tgr?Math.round(tgr.right):null, hudRight: hudR?Math.round(hudR.right):null,
+    muteRight: muteR?Math.round(muteR.right):null, hudLeft: hudR?Math.round(hudR.left):null,
+    h1Bottom: h1r?Math.round(h1r.bottom):null, subTop: subr?Math.round(subr.top):null };
+  // P7 carried forward: collapsible HUD still toggles a slim name+coins chip vs the full stats card
   const disp=el=>{ const e=$(el); return e?getComputedStyle(e).display:null; };
-  const splay=document.getElementById("s-play"), foot=$("footer");
-  m.hud={ collapsed:!!(S&&S.hudCollapsed), hudH:Math.round(hudR.height),
+  const splay=document.getElementById("s-play");
+  m.hud={ collapsed:!!(S&&S.hudCollapsed), hudH:Math.round(hudR?hudR.height:0),
     slimShown:disp("hudSlim")!=="none", barsShown:disp("bars")!=="none",
     togglePresent:!!$("hudToggle"), toggleGlyph:($("hudToggle")||{}).textContent,
     slimName:($("slim-name")||{}).textContent, slimCoins:($("slim-coins")||{}).textContent,
-    innerH:window.innerHeight, splayH:splay?Math.round(splay.getBoundingClientRect().height):0,
-    logH:Math.round(logR.height), footH:foot?Math.round(foot.getBoundingClientRect().height):0 };
+    startOverInHud:!!document.querySelector("#hudFoot button"), logCardGone:!$("log"), footerRowGone:!$("footer"),
+    innerH:window.innerHeight, splayH:splay?Math.round(splay.getBoundingClientRect().height):0 };
   const meta=n=>{ const e=document.querySelector('meta[name="'+n+'"]'); return e?e.content:null; };
   m.pwa={ manifest:!!document.querySelector('link[rel="manifest"]'),
     appleIcon:!!document.querySelector('link[rel="apple-touch-icon"]'),
