@@ -30,8 +30,8 @@
      Collapsed = slim name+coins chip (the resting default). Expanded = full stats card + Start Over. */
   #hud{position:absolute;z-index:6;line-height:1.2;          /* P8-fixup: own line-height — #worldWrap sets line-height:0 (for the canvas) which would otherwise collapse HUD text onto itself */
     top:calc(8px + env(safe-area-inset-top,0px));
-    left:calc(8px + env(safe-area-inset-left,0px));
-    max-width:min(400px,calc(100vw - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));  /* P8-fixup: keep the card compact so the top-right toggle hugs it (no mid-screen sprawl in landscape) */
+    left:calc(60px + env(safe-area-inset-left,0px));   /* P8-fixup2: start right of the top-left mute button so they never collide */
+    max-width:min(400px,calc(100vw - 68px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));  /* P8-fixup: compact card so the top-right chevron hugs it; fixup2: -68 = 60 left offset + 8 right margin (no overflow) */
     background:rgba(255,253,245,.92);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
     border:2px solid rgba(255,255,255,.72);border-radius:16px;
     box-shadow:0 8px 22px rgba(40,80,120,.22);padding:9px 11px}
@@ -133,10 +133,11 @@
     right:calc(16px + env(safe-area-inset-right,0px));
     bottom:calc(var(--ctl-lift) + 12px + env(safe-area-inset-bottom,0px))}
   @media(hover:hover) and (pointer:fine){ .tc,#dpad{display:none} }
-  /* P8: mute stays in the top area but moves to the top-RIGHT so it's clear of the HUD chip (top-left). */
+  /* P8-fixup2: mute moves to the top-LEFT corner; the HUD card (shifted right) and its top-right collapse
+     chevron own the rest of the top, so the speaker and the chevron no longer stack/collide. */
   #muteBtn{position:absolute;width:42px;height:42px;border-radius:50%;
     top:calc(10px + env(safe-area-inset-top,0px));
-    right:calc(10px + env(safe-area-inset-right,0px));
+    left:calc(10px + env(safe-area-inset-left,0px));
     border:2px solid rgba(255,255,255,.7);background:rgba(255,253,245,.9);font-size:19px;cursor:pointer;
     z-index:7;box-shadow:0 4px 10px rgba(0,0,0,.2);font-family:inherit}
   #muteBtn:hover{transform:scale(1.06)}
@@ -1641,7 +1642,10 @@ function runShot(){
   const h1r=Rq("#who h1"), subr=Rq("#status"), tgr=R("hudToggle");
   m.hudFix={ titleStacks: !!(h1r&&subr) && subr.top>=h1r.bottom-1,           // mood line sits BELOW the name line
     toggleOnCard: !!(tgr&&hudR) && tgr.left>=hudR.left-1 && tgr.right<=hudR.right+1 && tgr.top>=hudR.top-1,
+    muteClearOfHud: !!(muteR&&hudR) && muteR.right<=hudR.left+1,            // P8-fixup2: mute sits fully LEFT of the HUD card
+    muteToggleClear: !hit(muteR,tgr),                                      // P8-fixup2: mute no longer overlaps the collapse chevron
     toggleRightOfHud: tgr?Math.round(tgr.right):null, hudRight: hudR?Math.round(hudR.right):null,
+    muteRight: muteR?Math.round(muteR.right):null, hudLeft: hudR?Math.round(hudR.left):null,
     h1Bottom: h1r?Math.round(h1r.bottom):null, subTop: subr?Math.round(subr.top):null };
   // P7 carried forward: collapsible HUD still toggles a slim name+coins chip vs the full stats card
   const disp=el=>{ const e=$(el); return e?getComputedStyle(e).display:null; };
