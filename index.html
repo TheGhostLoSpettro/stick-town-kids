@@ -28,21 +28,22 @@
   /* ---------- HUD ---------- */
   /* P8: the HUD floats as a translucent overlay pinned top-left; the world shows through behind it.
      Collapsed = slim name+coins chip (the resting default). Expanded = full stats card + Start Over. */
-  #hud{position:absolute;z-index:6;
+  #hud{position:absolute;z-index:6;line-height:1.2;          /* P8-fixup: own line-height — #worldWrap sets line-height:0 (for the canvas) which would otherwise collapse HUD text onto itself */
     top:calc(8px + env(safe-area-inset-top,0px));
     left:calc(8px + env(safe-area-inset-left,0px));
-    max-width:min(560px,calc(100vw - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
-    background:rgba(255,253,245,.86);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+    max-width:min(400px,calc(100vw - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));  /* P8-fixup: keep the card compact so the top-right toggle hugs it (no mid-screen sprawl in landscape) */
+    background:rgba(255,253,245,.92);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
     border:2px solid rgba(255,255,255,.72);border-radius:16px;
     box-shadow:0 8px 22px rgba(40,80,120,.22);padding:9px 11px}
-  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;padding-right:34px}
+  #hudTop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;padding-right:44px}
   /* P7 collapsible HUD: a dedicated, misfire-safe toggle + a slim collapsed bar (name + coins) */
-  #hudToggle{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:9px;z-index:3;
-    border:2px solid #e3f1fb;background:linear-gradient(180deg,#fff,#eef9ff);color:#2a6fb0;font-size:15px;
+  /* P8-fixup: clear, obvious collapse/expand chevron, flush in the HUD card's top-right corner */
+  #hudToggle{position:absolute;top:7px;right:7px;width:36px;height:36px;border-radius:10px;z-index:8;
+    border:2px solid #9ad0f5;background:linear-gradient(180deg,#fff,#e8f5ff);color:#2a6fb0;font-size:18px;
     line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;
-    box-shadow:0 2px 6px rgba(40,80,120,.12)}
+    box-shadow:0 2px 7px rgba(40,80,120,.2)}
   #hudToggle:hover{border-color:#7cc6ff}
-  #hudSlim{display:none;align-items:center;gap:12px;padding-right:34px;cursor:pointer}
+  #hudSlim{display:none;align-items:center;gap:12px;padding-right:44px;cursor:pointer}
   #hudSlim .sn{font-size:16px;font-weight:bold;color:#2a6fb0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #hudSlim .sc{font-size:16px;font-weight:bold;color:#e6a700;margin-left:auto;white-space:nowrap}
   #hud.collapsed #hudTop, #hud.collapsed #bars{display:none}
@@ -1635,6 +1636,13 @@ function runShot(){
     toasts_dpad:!hit(toR,dpadR), toasts_go:!hit(toR,goR), toasts_hint:!hit(toR,hintR), toasts_mute:!hit(toR,muteR) };
   no.allClear=Object.keys(no).every(k=>no[k]===true);
   m.noOverlap=no;
+  // P8-fixup guards: HUD title text must stack (not overlap), and the toggle must hug the card's top-right
+  const Rq=sel=>{ const e=document.querySelector(sel); return e?e.getBoundingClientRect():null; };
+  const h1r=Rq("#who h1"), subr=Rq("#status"), tgr=R("hudToggle");
+  m.hudFix={ titleStacks: !!(h1r&&subr) && subr.top>=h1r.bottom-1,           // mood line sits BELOW the name line
+    toggleOnCard: !!(tgr&&hudR) && tgr.left>=hudR.left-1 && tgr.right<=hudR.right+1 && tgr.top>=hudR.top-1,
+    toggleRightOfHud: tgr?Math.round(tgr.right):null, hudRight: hudR?Math.round(hudR.right):null,
+    h1Bottom: h1r?Math.round(h1r.bottom):null, subTop: subr?Math.round(subr.top):null };
   // P7 carried forward: collapsible HUD still toggles a slim name+coins chip vs the full stats card
   const disp=el=>{ const e=$(el); return e?getComputedStyle(e).display:null; };
   const splay=document.getElementById("s-play");
